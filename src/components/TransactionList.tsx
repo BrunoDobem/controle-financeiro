@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useTranslation } from '@/hooks/useTranslation';
 import EditTransactionDialog from './EditTransactionDialog';
+import { useCurrencyFormat } from '@/hooks/useCurrencyFormat';
 
 interface TransactionListProps {
   className?: string;
@@ -32,6 +33,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({ className }) =
   const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const formatCurrency = useCurrencyFormat();
   
   const handleSort = (column: 'date' | 'amount') => {
     if (sortBy === column) {
@@ -177,7 +179,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({ className }) =
                         {formatDate(transaction.date)}
                       </div>
                       <div className="col-span-2 text-right font-medium">
-                        ${transaction.amount.toFixed(2)}
+                        {formatCurrency(transaction.amount)}
                       </div>
                       <div className="col-span-1 flex justify-end items-center space-x-1">
                         <button

@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import Header from '@/components/Header';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -7,44 +6,123 @@ import {
 } from 'recharts';
 import { PieChart as PieChartIcon, BarChart3, LineChart as LineChartIcon, Calendar } from 'lucide-react';
 import { cn } from '@/lib/utils';
-
-// Sample data
-const monthlyData = [
-  { name: 'Jan', expenses: 1200 },
-  { name: 'Feb', expenses: 1900 },
-  { name: 'Mar', expenses: 1500 },
-  { name: 'Apr', expenses: 1700 },
-  { name: 'May', expenses: 1300 },
-  { name: 'Jun', expenses: 1600 },
-];
-
-const categoryData = [
-  { name: 'Food', value: 35 },
-  { name: 'Housing', value: 25 },
-  { name: 'Transport', value: 15 },
-  { name: 'Entertainment', value: 10 },
-  { name: 'Shopping', value: 10 },
-  { name: 'Other', value: 5 },
-];
+import { useTransactions } from '@/context/TransactionsContext';
+import { useTranslation } from '@/hooks/useTranslation';
+import { useCurrencyFormat } from '@/hooks/useCurrencyFormat';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#8dd1e1'];
 
 const Reports = () => {
+  const { t } = useTranslation();
+  const { transactions } = useTransactions();
+  const formatCurrency = useCurrencyFormat();
   const [activeTab, setActiveTab] = useState('monthly');
   const [dateRange, setDateRange] = useState('6months');
   
   const tabs = [
-    { id: 'monthly', label: 'Monthly Overview', icon: <BarChart3 className="w-4 h-4 mr-2" /> },
-    { id: 'trends', label: 'Spending Trends', icon: <LineChartIcon className="w-4 h-4 mr-2" /> },
-    { id: 'breakdown', label: 'Category Breakdown', icon: <PieChartIcon className="w-4 h-4 mr-2" /> },
+    { id: 'monthly', label: t('monthlyOverview'), icon: <BarChart3 className="w-4 h-4 mr-2" /> },
+    { id: 'trends', label: t('spendingTrendsReport'), icon: <LineChartIcon className="w-4 h-4 mr-2" /> },
+    { id: 'breakdown', label: t('categoryBreakdown'), icon: <PieChartIcon className="w-4 h-4 mr-2" /> },
   ];
   
   const dateRanges = [
-    { id: '1month', label: '1 Month' },
-    { id: '3months', label: '3 Months' },
-    { id: '6months', label: '6 Months' },
-    { id: '1year', label: '1 Year' },
+    { 
+      id: '1month', 
+      label: t('last30Days'),
+      getStartDate: (now: Date) => new Date(now.getFullYear(), now.getMonth() - 1, now.getDate())
+    },
+    { 
+      id: '3months', 
+      label: `3 ${t('months')}`,
+      getStartDate: (now: Date) => new Date(now.getFullYear(), now.getMonth() - 3, 1)
+    },
+    { 
+      id: '6months', 
+      label: `6 ${t('months')}`,
+      getStartDate: (now: Date) => new Date(now.getFullYear(), now.getMonth() - 6, 1)
+    },
+    { 
+      id: '1year', 
+      label: `1 ${t('year')}`,
+      getStartDate: (now: Date) => new Date(now.getFullYear() - 1, now.getMonth(), 1)
+    },
   ];
+
+  const filteredTransactions = useMemo(() => {
+    const now = new Date();
+    const selectedRange = dateRanges.find(range => range.id === dateRange);
+    if (!selectedRange) return transactions;
+
+    const startDate = selectedRange.getStartDate(now);
+    return transactions.filter(t => {
+      const transactionDate = new Date(t.date);
+      return transactionDate >= startDate && transactionDate <= now;
+    });
+  }, [transactions, dateRange, dateRanges]);
+
+  const monthlyData = useMemo(() => {
+    const monthlyTotals = new Map();
+    
+    filteredTransactions.forEach(transaction => {
+      const date = new Date(transaction.date);
+      const monthKey = date.toLocaleString('default', { month: 'short', year: '2-digit' });
+      const currentTotal = monthlyTotals.get(monthKey) || 0;
+      monthlyTotals.set(monthKey, currentTotal + transaction.amount);
+    });
+
+    return Array.from(monthlyTotals.entries())
+      .map(([name, expenses]) => ({ name, expenses }))
+      .sort((a, b) => {
+        const [monthA, yearA] = a.name.split(' ');
+        const [monthB, yearB] = b.name.split(' ');
+        const dateA = new Date(`${monthA} 20${yearA}`).getTime();
+        const dateB = new Date(`${monthB} 20${yearB}`).getTime();
+        return dateA - dateB;
+      });
+  }, [filteredTransactions]);
+
+  const categoryData = useMemo(() => {
+    const categoryTotals = new Map();
+    let totalAmount = 0;
+
+    filteredTransactions.forEach(transaction => {
+      const currentTotal = categoryTotals.get(transaction.category) || 0;
+      categoryTotals.set(transaction.category, currentTotal + transaction.amount);
+      totalAmount += transaction.amount;
+    });
+
+    return Array.from(categoryTotals.entries())
+      .map(([name, value]) => ({
+        name: t(name),
+        value: Math.round((value / totalAmount) * 100)
+      }))
+      .sort((a, b) => b.value - a.value);
+  }, [filteredTransactions, t]);
+
+  const spendingSummary = useMemo(() => {
+    if (monthlyData.length === 0) return {
+      average: 0,
+      highest: { amount: 0, month: '' },
+      lowest: { amount: 0, month: '' },
+      total: 0
+    };
+
+    const total = filteredTransactions.reduce((sum, t) => sum + t.amount, 0);
+    const average = total / monthlyData.length;
+    const highest = monthlyData.reduce((max, curr) => 
+      curr.expenses > max.expenses ? curr : max
+    );
+    const lowest = monthlyData.reduce((min, curr) => 
+      curr.expenses < min.expenses ? curr : min
+    );
+
+    return {
+      average,
+      highest: { amount: highest.expenses, month: highest.name },
+      lowest: { amount: lowest.expenses, month: lowest.name },
+      total
+    };
+  }, [filteredTransactions, monthlyData]);
   
   return (
     <div className="min-h-screen bg-background">
@@ -56,8 +134,8 @@ const Reports = () => {
               <PieChartIcon className="h-6 w-6" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold mb-1">Financial Reports</h1>
-              <p className="text-muted-foreground">Analyze your spending patterns</p>
+              <h1 className="text-2xl font-bold mb-1">{t('financialReports')}</h1>
+              <p className="text-muted-foreground">{t('analyzeSpending')}</p>
             </div>
           </div>
         </div>
@@ -119,9 +197,13 @@ const Reports = () => {
                   >
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
                     <XAxis dataKey="name" tickLine={false} />
-                    <YAxis tickFormatter={(value) => `$${value}`} tickLine={false} axisLine={false} />
+                    <YAxis 
+                      tickFormatter={(value) => formatCurrency(value)} 
+                      tickLine={false} 
+                      axisLine={false} 
+                    />
                     <Tooltip
-                      formatter={(value) => [`$${value}`, 'Expenses']}
+                      formatter={(value: number) => [formatCurrency(value), t('expenses')]}
                       contentStyle={{ 
                         borderRadius: '8px', 
                         border: '1px solid hsl(var(--border))',
@@ -141,9 +223,13 @@ const Reports = () => {
                   >
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
                     <XAxis dataKey="name" tickLine={false} />
-                    <YAxis tickFormatter={(value) => `$${value}`} tickLine={false} axisLine={false} />
+                    <YAxis 
+                      tickFormatter={(value) => formatCurrency(value)} 
+                      tickLine={false} 
+                      axisLine={false} 
+                    />
                     <Tooltip
-                      formatter={(value) => [`$${value}`, 'Expenses']}
+                      formatter={(value: number) => [formatCurrency(value), t('expenses')]}
                       contentStyle={{ 
                         borderRadius: '8px', 
                         border: '1px solid hsl(var(--border))',
@@ -181,7 +267,7 @@ const Reports = () => {
                           ))}
                         </Pie>
                         <Tooltip
-                          formatter={(value) => [`${value}%`, 'Percentage']}
+                          formatter={(value) => [`${value}%`, t('percentage')]}
                           contentStyle={{ 
                             borderRadius: '8px', 
                             border: '1px solid hsl(var(--border))',
@@ -214,8 +300,8 @@ const Reports = () => {
                     
                     <div className="mt-6 pt-4 border-t border-border">
                       <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium">Total Spending</span>
-                        <span className="text-lg font-bold">$7,200</span>
+                        <span className="text-sm font-medium">{t('totalSpending')}</span>
+                        <span className="text-lg font-bold">{formatCurrency(spendingSummary.total)}</span>
                       </div>
                     </div>
                   </div>
@@ -227,48 +313,25 @@ const Reports = () => {
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 slide-up" style={{ animationDelay: '0.2s', animationFillMode: 'forwards' }}>
           <div className="bg-card rounded-xl shadow-sm border border-border/50 p-4">
-            <h3 className="text-lg font-medium mb-4">Spending Summary</h3>
+            <h3 className="text-lg font-medium mb-4">{t('spendingSummary')}</h3>
             <div className="space-y-4">
               <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Average Monthly</span>
-                <span className="font-medium">$1,200</span>
+                <span className="text-sm text-muted-foreground">{t('averageMonthly')}</span>
+                <span className="font-medium">{formatCurrency(spendingSummary.average)}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Highest Month</span>
-                <span className="font-medium">$1,900 (Feb)</span>
+                <span className="text-sm text-muted-foreground">{t('highestMonth')}</span>
+                <span className="font-medium">{formatCurrency(spendingSummary.highest.amount)} ({spendingSummary.highest.month})</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Lowest Month</span>
-                <span className="font-medium">$1,200 (Jan)</span>
+                <span className="text-sm text-muted-foreground">{t('lowestMonth')}</span>
+                <span className="font-medium">{formatCurrency(spendingSummary.lowest.amount)} ({spendingSummary.lowest.month})</span>
               </div>
               <div className="h-px bg-border my-2" />
               <div className="flex justify-between items-center">
-                <span className="text-sm font-medium">Year-to-Date</span>
-                <span className="text-lg font-bold">$9,200</span>
+                <span className="text-sm font-medium">{t('yearToDate')}</span>
+                <span className="text-lg font-bold">{formatCurrency(spendingSummary.total)}</span>
               </div>
-            </div>
-          </div>
-          
-          <div className="bg-card rounded-xl shadow-sm border border-border/50 p-4">
-            <h3 className="text-lg font-medium mb-4">Top Spending Categories</h3>
-            <div className="space-y-3">
-              {categoryData.slice(0, 4).map((category, index) => (
-                <div key={index} className="group">
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="text-sm">{category.name}</span>
-                    <span className="text-sm font-medium">{category.value}%</span>
-                  </div>
-                  <div className="w-full h-2 bg-secondary rounded-full overflow-hidden">
-                    <div 
-                      className="h-full transition-all duration-500 ease-out group-hover:opacity-80"
-                      style={{ 
-                        width: `${category.value}%`, 
-                        backgroundColor: COLORS[index % COLORS.length]
-                      }}
-                    />
-                  </div>
-                </div>
-              ))}
             </div>
           </div>
         </div>
