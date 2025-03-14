@@ -1,7 +1,6 @@
-
 import React, { useState } from 'react';
 import CategoryBadge from './CategoryBadge';
-import { ChevronDown, ChevronUp, Search, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Search, Trash2, Edit2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Transaction } from '@/types';
 import { useTransactions } from '@/context/TransactionsContext';
@@ -17,6 +16,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useTranslation } from '@/hooks/useTranslation';
+import EditTransactionDialog from './EditTransactionDialog';
 
 interface TransactionListProps {
   className?: string;
@@ -30,6 +30,8 @@ export const TransactionList: React.FC<TransactionListProps> = ({ className }) =
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
   
   const handleSort = (column: 'date' | 'amount') => {
     if (sortBy === column) {
@@ -83,7 +85,12 @@ export const TransactionList: React.FC<TransactionListProps> = ({ className }) =
     const method = paymentMethods.find(m => m.id === id);
     return method ? method.name : '';
   };
-  
+
+  const handleEditClick = (transaction: Transaction) => {
+    setEditingTransaction(transaction);
+    setEditDialogOpen(true);
+  };
+
   return (
     <>
       <div className={cn("bg-card rounded-xl shadow-sm border border-border/50 overflow-hidden", className)}>
@@ -172,7 +179,14 @@ export const TransactionList: React.FC<TransactionListProps> = ({ className }) =
                       <div className="col-span-2 text-right font-medium">
                         ${transaction.amount.toFixed(2)}
                       </div>
-                      <div className="col-span-1 flex justify-end items-center">
+                      <div className="col-span-1 flex justify-end items-center space-x-1">
+                        <button
+                          onClick={() => handleEditClick(transaction)}
+                          className="p-1 text-muted-foreground hover:text-primary transition-colors"
+                          aria-label={t('editTransaction')}
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
                         <button
                           onClick={() => handleDeleteClick(transaction.id)}
                           className="p-1 text-muted-foreground hover:text-red-500 transition-colors"
@@ -189,6 +203,12 @@ export const TransactionList: React.FC<TransactionListProps> = ({ className }) =
           </div>
         </div>
       </div>
+
+      <EditTransactionDialog
+        transaction={editingTransaction}
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+      />
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>

@@ -36,6 +36,7 @@ interface TransactionsContextType {
   transactions: Transaction[];
   paymentMethods: PaymentMethod[];
   addTransaction: (transaction: Omit<Transaction, 'id'>) => void;
+  updateTransaction: (id: string, transaction: Omit<Transaction, 'id'>) => void;
   deleteTransaction: (id: string) => void;
   addPaymentMethod: (paymentMethod: Omit<PaymentMethod, 'id'>) => void;
   deletePaymentMethod: (id: string) => void;
@@ -71,6 +72,12 @@ export const TransactionsProvider = ({ children }: { children: ReactNode }) => {
     setTransactions(prev => [newTransaction, ...prev]);
   };
 
+  const updateTransaction = (id: string, transaction: Omit<Transaction, 'id'>) => {
+    setTransactions(prev => prev.map(t => 
+      t.id === id ? { ...transaction, id } : t
+    ));
+  };
+
   const deleteTransaction = (id: string) => {
     setTransactions(prev => prev.filter(transaction => transaction.id !== id));
   };
@@ -100,6 +107,7 @@ export const TransactionsProvider = ({ children }: { children: ReactNode }) => {
         transactions, 
         paymentMethods,
         addTransaction, 
+        updateTransaction,
         deleteTransaction,
         addPaymentMethod,
         deletePaymentMethod

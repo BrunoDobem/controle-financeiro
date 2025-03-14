@@ -136,7 +136,11 @@ const translations = {
     
     // Alerts
     'spendingLimitAlert': 'Spending Limit Alert',
-    'limitExceeded': 'You have exceeded your monthly spending limit of'
+    'limitExceeded': 'You have exceeded your monthly spending limit of',
+    editTransaction: "Edit transaction",
+    editingTransaction: "Editing transaction",
+    saveChanges: "Save changes",
+    transactionUpdated: "Transaction updated successfully"
   },
   pt: {
     // Dashboard
@@ -241,6 +245,10 @@ const translations = {
     
     // Alerts
     'spendingLimitAlert': 'Alerta de Limite de Gastos',
-    'limitExceeded': 'Você excedeu seu limite mensal de gastos de'
+    'limitExceeded': 'Você excedeu seu limite mensal de gastos de',
+    editTransaction: "Editar transação",
+    editingTransaction: "Editando transação",
+    saveChanges: "Salvar alterações",
+    transactionUpdated: "Transação atualizada com sucesso"
   }
 };
