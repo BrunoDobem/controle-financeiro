@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Transaction, Category } from '@/types';
 import { useTransactions } from '@/context/TransactionsContext';
 import { useTranslation } from '@/hooks/useTranslation';
+import { useCurrencyFormat } from '@/hooks/useCurrencyFormat';
 import {
   Dialog,
   DialogContent,
@@ -25,6 +26,7 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
 }) => {
   const { t } = useTranslation();
   const { updateTransaction, paymentMethods } = useTransactions();
+  const formatCurrency = useCurrencyFormat();
   
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
@@ -74,7 +76,9 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{t('editTransaction')}</DialogTitle>
+          <DialogTitle>
+            {t('editingTransaction')}: {formatCurrency(parseFloat(amount) || 0)}
+          </DialogTitle>
         </DialogHeader>
         
         <form onSubmit={handleSubmit} className="space-y-4">
