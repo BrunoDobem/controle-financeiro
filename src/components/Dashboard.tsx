@@ -122,18 +122,18 @@ const Dashboard: React.FC = () => {
   const spendingLimitProgress = (totalSpending / settings.spendingLimit) * 100;
 
   return (
-    <div className="container mx-auto px-4 py-6 mt-16">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold mb-1">{t('financialDashboard')}</h1>
-        <p className="text-muted-foreground">{t('trackSpending')}</p>
+    <div className="container mx-auto px-4 py-4 sm:py-6 mt-14 sm:mt-16">
+      <div className="mb-4 sm:mb-6">
+        <h1 className="text-xl sm:text-2xl font-bold mb-1">{t('financialDashboard')}</h1>
+        <p className="text-sm sm:text-base text-muted-foreground">{t('trackSpending')}</p>
       </div>
       
       {/* Spending Limit Progress */}
-      <div className="mb-6">
-        <div className="bg-card rounded-xl shadow-sm border border-border/50 p-4">
+      <div className="mb-4 sm:mb-6">
+        <div className="bg-card rounded-xl shadow-sm border border-border/50 p-3 sm:p-4">
           <div className="flex justify-between items-center mb-2">
-            <h3 className="text-sm font-medium">{t('monthlySpendingLimit')}</h3>
-            <span className="text-sm text-muted-foreground">
+            <h3 className="text-xs sm:text-sm font-medium">{t('monthlySpendingLimit')}</h3>
+            <span className="text-xs sm:text-sm text-muted-foreground">
               {formatCurrency(totalSpending)} / {formatCurrency(settings.spendingLimit)}
             </span>
           </div>
@@ -151,7 +151,7 @@ const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4 mb-4 sm:mb-6">
         <StatCard
           title={t('totalSpending')}
           value={formatCurrency(totalSpending)}
@@ -188,40 +188,52 @@ const Dashboard: React.FC = () => {
         />
       </div>
       
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-6 mb-4 sm:mb-6">
         <div className={cn(
-          "lg:col-span-2 bg-card rounded-xl shadow-sm border border-border/50 p-4",
+          "lg:col-span-2 bg-card rounded-xl shadow-sm border border-border/50 p-3 sm:p-4",
           "slide-up"
         )} style={{ animationDelay: '0.1s', animationFillMode: 'forwards' }}>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-medium">{t('spendingTrends')}</h3>
+          <div className="flex items-center justify-between mb-3 sm:mb-4">
+            <h3 className="text-base sm:text-lg font-medium">{t('spendingTrends')}</h3>
             <div className="flex space-x-2">
-              <div className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full">
+              <div className="text-[10px] sm:text-xs bg-primary/10 text-primary px-2 py-1 rounded-full">
                 {t('thisWeek')}
               </div>
             </div>
           </div>
           
-          <div className="h-64">
+          <div className="h-48 sm:h-64">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart
                 data={chartData}
                 margin={{
                   top: 5,
-                  right: 10,
-                  left: 0,
+                  right: 5,
+                  left: -20,
                   bottom: 5,
                 }}
               >
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                <XAxis dataKey="name" tickLine={false} />
-                <YAxis tickFormatter={(value) => formatCurrency(value)} tickLine={false} axisLine={false} />
+                <XAxis 
+                  dataKey="name" 
+                  tickLine={false}
+                  tick={{ fontSize: 12 }}
+                  interval="preserveStartEnd"
+                />
+                <YAxis 
+                  tickFormatter={(value) => formatCurrency(value)} 
+                  tickLine={false} 
+                  axisLine={false}
+                  tick={{ fontSize: 12 }}
+                  width={60}
+                />
                 <Tooltip 
                   formatter={(value) => [formatCurrency(value as number), t('spending')]}
                   contentStyle={{ 
                     borderRadius: '8px', 
                     border: '1px solid hsl(var(--border))',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+                    fontSize: '12px'
                   }}
                 />
                 <Line
@@ -229,8 +241,8 @@ const Dashboard: React.FC = () => {
                   dataKey="spending"
                   stroke="hsl(var(--primary))"
                   strokeWidth={2}
-                  dot={{ r: 4, strokeWidth: 2 }}
-                  activeDot={{ r: 6, strokeWidth: 0, fill: 'hsl(var(--primary))' }}
+                  dot={{ r: 3, strokeWidth: 2 }}
+                  activeDot={{ r: 5, strokeWidth: 0, fill: 'hsl(var(--primary))' }}
                 />
               </LineChart>
             </ResponsiveContainer>

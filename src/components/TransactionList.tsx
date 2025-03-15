@@ -133,39 +133,40 @@ export const TransactionList: React.FC<TransactionListProps> = ({ className }) =
     <>
       <div className={cn("bg-card rounded-xl shadow-sm border border-border/50 overflow-hidden", className)}>
         <div className="p-4">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
             <h3 className="text-lg font-medium">{t('recentTransactions')}</h3>
-            <div className="relative">
+            <div className="relative w-full sm:w-auto">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
               <input
                 type="text"
                 placeholder={t('searchTransactions')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 pr-3 py-1.5 rounded-lg text-sm border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                className="w-full sm:w-64 pl-9 pr-3 py-2 rounded-lg text-sm border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
           </div>
-          
-          <div className="overflow-hidden">
-            {sortedTransactions.length === 0 ? (
-              <div className="text-center py-8">
-                <p className="text-muted-foreground">{t('noTransactionsFound')}</p>
-              </div>
-            ) : (
-              <div>
-                <div className="grid grid-cols-12 gap-2 px-4 py-2 bg-muted rounded-lg text-xs font-medium text-muted-foreground mb-2">
-                  <div className="col-span-4">
+
+          {sortedTransactions.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-muted-foreground">{t('noTransactionsFound')}</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              {/* Cabeçalho da tabela */}
+              <div className="min-w-[800px]">
+                <div className="grid grid-cols-12 gap-4 px-4 py-2 bg-muted rounded-lg text-xs font-medium text-muted-foreground mb-2">
+                  <div className="col-span-3">
                     {t('description')}
                   </div>
                   <div className="col-span-2">
                     {t('category')}
                   </div>
-                  <div className="col-span-2">
+                  <div className="col-span-3">
                     {t('paymentMethod')}
                   </div>
                   <div 
-                    className="col-span-1 flex items-center cursor-pointer"
+                    className="col-span-2 flex items-center cursor-pointer"
                     onClick={() => handleSort('date')}
                   >
                     {t('date')}
@@ -186,59 +187,63 @@ export const TransactionList: React.FC<TransactionListProps> = ({ className }) =
                         <ChevronDown className="w-3 h-3 ml-1" />
                     )}
                   </div>
-                  <div className="col-span-1"></div>
                 </div>
-                
-                <div className="space-y-2">
+
+                {/* Lista de transações */}
+                <div className="space-y-1">
                   {sortedTransactions.map((transaction, index) => (
                     <div 
                       key={transaction.id} 
-                      className="grid grid-cols-12 gap-2 px-4 py-3 rounded-lg hover:bg-muted/50 transition-colors"
-                      style={{ 
-                        animationDelay: `${index * 0.05}s`, 
-                        animationFillMode: 'backwards' 
-                      }}
+                      className="grid grid-cols-12 gap-4 px-4 py-3 rounded-lg hover:bg-muted/50 transition-colors items-center relative group"
                     >
-                      <div className="col-span-4 font-medium truncate">{transaction.description}</div>
+                      <div className="col-span-3 font-medium truncate">
+                        {transaction.description}
+                      </div>
                       <div className="col-span-2">
                         <CategoryBadge category={transaction.category} />
                       </div>
-                      <div className="col-span-2 text-sm text-muted-foreground">
-                        {getPaymentMethodInfo(transaction)}
-                        {transaction.dueMonth && (
-                          <span className="ml-1 text-xs bg-blue-100 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400 px-1 rounded">
-                            {new Date(transaction.dueMonth + '-01').toLocaleDateString(undefined, { month: 'short', year: '2-digit' })}
-                          </span>
-                        )}
+                      <div className="col-span-3 text-sm text-muted-foreground">
+                        <div className="flex items-center gap-2">
+                          {getPaymentMethodInfo(transaction)}
+                          {transaction.dueMonth && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400">
+                              {new Date(transaction.dueMonth + '-01').toLocaleDateString(undefined, { month: 'short', year: '2-digit' })}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      <div className="col-span-1 text-sm text-muted-foreground">
+                      <div className="col-span-2 text-sm text-muted-foreground">
                         {formatDate(transaction.date)}
                       </div>
                       <div className="col-span-2 text-right font-medium">
-                        {getTransactionAmount(transaction)}
-                      </div>
-                      <div className="col-span-1 flex justify-end items-center space-x-1">
-                        <button
-                          onClick={() => handleEditClick(transaction)}
-                          className="p-1 text-muted-foreground hover:text-primary transition-colors"
-                          aria-label={t('editTransaction')}
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteClick(transaction.id)}
-                          className="p-1 text-muted-foreground hover:text-red-500 transition-colors"
-                          aria-label={t('deleteTransaction')}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center justify-end gap-2">
+                          <div className="flex-1 text-right">
+                            {getTransactionAmount(transaction)}
+                          </div>
+                          <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={() => handleEditClick(transaction)}
+                              className="p-1 text-muted-foreground hover:text-primary transition-colors"
+                              aria-label={t('editTransaction')}
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteClick(transaction.id)}
+                              className="p-1 text-muted-foreground hover:text-red-500 transition-colors"
+                              aria-label={t('deleteTransaction')}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   ))}
                 </div>
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
 
