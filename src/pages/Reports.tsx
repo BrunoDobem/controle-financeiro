@@ -14,7 +14,7 @@ const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#8dd1e1'
 
 const Reports = () => {
   const { t } = useTranslation();
-  const { transactions } = useTransactions();
+  const { transactions, calculateMonthlyInstallments } = useTransactions();
   const formatCurrency = useCurrencyFormat();
   const [activeTab, setActiveTab] = useState('monthly');
   const [dateRange, setDateRange] = useState('6months');
@@ -62,12 +62,40 @@ const Reports = () => {
 
   const monthlyData = useMemo(() => {
     const monthlyTotals = new Map();
+    const now = new Date();
+    const selectedRange = dateRanges.find(range => range.id === dateRange);
+    if (!selectedRange) return [];
+
+    const startDate = selectedRange.getStartDate(now);
     
-    filteredTransactions.forEach(transaction => {
-      const date = new Date(transaction.date);
-      const monthKey = date.toLocaleString('default', { month: 'short', year: '2-digit' });
-      const currentTotal = monthlyTotals.get(monthKey) || 0;
-      monthlyTotals.set(monthKey, currentTotal + transaction.amount);
+    // Gera uma lista de todos os meses no intervalo
+    const months = [];
+    let currentDate = new Date(startDate);
+    while (currentDate <= now) {
+      const monthKey = currentDate.toLocaleString('default', { month: 'short', year: '2-digit' });
+      const yearMonth = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
+      months.push({ monthKey, yearMonth });
+      currentDate.setMonth(currentDate.getMonth() + 1);
+    }
+
+    // Para cada mês, calcula o total incluindo parcelas
+    months.forEach(({ monthKey, yearMonth }) => {
+      let monthTotal = 0;
+
+      // Soma transações regulares do mês
+      filteredTransactions.forEach(transaction => {
+        const transactionDate = new Date(transaction.date);
+        const transactionYearMonth = `${transactionDate.getFullYear()}-${String(transactionDate.getMonth() + 1).padStart(2, '0')}`;
+        
+        if (!transaction.installments && transactionYearMonth === yearMonth) {
+          monthTotal += transaction.amount;
+        }
+      });
+
+      // Adiciona o valor das parcelas para este mês
+      monthTotal += calculateMonthlyInstallments(filteredTransactions, yearMonth);
+
+      monthlyTotals.set(monthKey, monthTotal);
     });
 
     return Array.from(monthlyTotals.entries())
@@ -79,16 +107,37 @@ const Reports = () => {
         const dateB = new Date(`${monthB} 20${yearB}`).getTime();
         return dateA - dateB;
       });
-  }, [filteredTransactions]);
+  }, [filteredTransactions, dateRange, dateRanges, calculateMonthlyInstallments]);
 
   const categoryData = useMemo(() => {
     const categoryTotals = new Map();
     let totalAmount = 0;
 
+    // Função auxiliar para adicionar valor à categoria
+    const addToCategory = (category: string, amount: number) => {
+      const currentTotal = categoryTotals.get(category) || 0;
+      categoryTotals.set(category, currentTotal + amount);
+      totalAmount += amount;
+    };
+
     filteredTransactions.forEach(transaction => {
-      const currentTotal = categoryTotals.get(transaction.category) || 0;
-      categoryTotals.set(transaction.category, currentTotal + transaction.amount);
-      totalAmount += transaction.amount;
+      if (transaction.installments) {
+        // Para transações parceladas, distribui o valor das parcelas
+        transaction.installments.forEach(installment => {
+          const installmentDate = new Date(installment.dueDate);
+          const now = new Date();
+          const selectedRange = dateRanges.find(range => range.id === dateRange);
+          if (!selectedRange) return;
+
+          const startDate = selectedRange.getStartDate(now);
+          if (installmentDate >= startDate && installmentDate <= now) {
+            addToCategory(transaction.category, installment.amount);
+          }
+        });
+      } else {
+        // Para transações normais, usa o valor total
+        addToCategory(transaction.category, transaction.amount);
+      }
     });
 
     return Array.from(categoryTotals.entries())
@@ -97,7 +146,7 @@ const Reports = () => {
         value: Math.round((value / totalAmount) * 100)
       }))
       .sort((a, b) => b.value - a.value);
-  }, [filteredTransactions, t]);
+  }, [filteredTransactions, dateRange, dateRanges, t]);
 
   const spendingSummary = useMemo(() => {
     if (monthlyData.length === 0) return {
@@ -107,7 +156,7 @@ const Reports = () => {
       total: 0
     };
 
-    const total = filteredTransactions.reduce((sum, t) => sum + t.amount, 0);
+    const total = monthlyData.reduce((sum, month) => sum + month.expenses, 0);
     const average = total / monthlyData.length;
     const highest = monthlyData.reduce((max, curr) => 
       curr.expenses > max.expenses ? curr : max
@@ -122,7 +171,7 @@ const Reports = () => {
       lowest: { amount: lowest.expenses, month: lowest.name },
       total
     };
-  }, [filteredTransactions, monthlyData]);
+  }, [monthlyData]);
   
   return (
     <div className="min-h-screen bg-background">
