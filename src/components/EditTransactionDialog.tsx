@@ -34,6 +34,7 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
   const [category, setCategory] = useState<Category>('other');
   const [paymentMethod, setPaymentMethod] = useState('');
   const [dueMonth, setDueMonth] = useState<string | undefined>(undefined);
+  const [totalInstallments, setTotalInstallments] = useState<number>(1);
 
   const categories: Category[] = [
     'food', 'shopping', 'transport', 'entertainment',
@@ -48,6 +49,7 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
       setCategory(transaction.category);
       setPaymentMethod(transaction.paymentMethod || '');
       setDueMonth(transaction.dueMonth);
+      setTotalInstallments(transaction.totalInstallments || 1);
     }
   }, [transaction]);
 
@@ -59,6 +61,9 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
       return;
     }
     
+    const selectedMethod = paymentMethods.find(m => m.id === paymentMethod);
+    const isCreditCard = selectedMethod?.type === 'credit';
+    
     updateTransaction(transaction.id, {
       description,
       amount: parseFloat(amount),
@@ -66,11 +71,15 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
       category,
       paymentMethod,
       dueMonth,
+      totalInstallments: isCreditCard ? totalInstallments : undefined
     });
     
     toast.success(t('transactionUpdated'));
     onOpenChange(false);
   };
+
+  const selectedMethod = paymentMethods.find(m => m.id === paymentMethod);
+  const isCreditCard = selectedMethod?.type === 'credit';
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -145,7 +154,7 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
             </select>
           </div>
           
-          {paymentMethods.find(m => m.id === paymentMethod)?.type === 'credit' && (
+          {isCreditCard && (
             <div>
               <label className="text-sm font-medium mb-1 block">{t('dueMonth')}</label>
               <input
@@ -154,6 +163,33 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
                 onChange={(e) => setDueMonth(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg border border-input bg-background"
               />
+            </div>
+          )}
+          
+          {isCreditCard && (
+            <div>
+              <label className="text-sm font-medium mb-1 block">{t('installments')}</label>
+              <select
+                value={totalInstallments}
+                onChange={(e) => setTotalInstallments(Number(e.target.value))}
+                className="w-full px-3 py-2 rounded-lg border border-input bg-background"
+              >
+                {Array.from({ length: 12 }).map((_, i) => (
+                  <option key={i + 1} value={i + 1}>
+                    {i + 1}x {amount && `de ${formatCurrency(parseFloat(amount) / (i + 1))}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          
+          {isCreditCard && (
+            <div className="text-sm text-muted-foreground">
+              <p>{t('installmentInfo', { 
+                total: formatCurrency(parseFloat(amount || '0')),
+                installment: formatCurrency(parseFloat(amount || '0') / totalInstallments),
+                count: totalInstallments
+              })}</p>
             </div>
           )}
           

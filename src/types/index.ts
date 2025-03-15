@@ -1,4 +1,3 @@
-
 export type Category = 'food' | 'shopping' | 'transport' | 'entertainment' | 'housing' | 'utilities' | 'health' | 'other';
 
 export type PaymentMethod = {
@@ -6,6 +5,12 @@ export type PaymentMethod = {
   name: string;
   type: 'credit' | 'debit' | 'cash' | 'other';
   color?: string;
+};
+
+export type CreditCardInstallment = {
+  installmentNumber: number;
+  amount: number;
+  dueDate: string;
 };
 
 export interface Transaction {
@@ -16,6 +21,11 @@ export interface Transaction {
   category: Category;
   paymentMethod?: string;
   dueMonth?: string; // YYYY-MM format for credit card transactions
+  installments?: CreditCardInstallment[];
+  totalInstallments?: number;
+  installmentAmount?: number; // Valor de cada parcela
+  totalAmount?: number; // Valor total da compra
+  originalTransactionId?: string; // Para agrupar parcelas da mesma compra
 }
 
 export type ThemeMode = 'light' | 'dark' | 'system';

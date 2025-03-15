@@ -82,10 +82,46 @@ export const TransactionList: React.FC<TransactionListProps> = ({ className }) =
     setDeleteDialogOpen(false);
   };
   
-  const getPaymentMethodName = (id?: string) => {
-    if (!id) return '';
-    const method = paymentMethods.find(m => m.id === id);
-    return method ? method.name : '';
+  const getPaymentMethodInfo = (transaction: Transaction) => {
+    if (!transaction.paymentMethod) return '';
+    const method = paymentMethods.find(m => m.id === transaction.paymentMethod);
+    if (!method) return '';
+
+    let info = method.name;
+    
+    if (method.type === 'credit' && transaction.totalInstallments && transaction.totalInstallments > 1) {
+      info += ` (${transaction.totalInstallments}x)`;
+    }
+    
+    return info;
+  };
+
+  const getTransactionAmount = (transaction: Transaction) => {
+    const method = paymentMethods.find(m => m.id === transaction.paymentMethod);
+    const isCreditCard = method?.type === 'credit';
+    
+    if (isCreditCard && transaction.totalInstallments && transaction.totalInstallments > 1) {
+      return (
+        <div className="flex flex-col items-end">
+          <div className="flex items-center gap-1">
+            <span>{formatCurrency(transaction.installmentAmount || transaction.amount)}</span>
+            <span className="text-xs text-muted-foreground">/ mês</span>
+          </div>
+          <span className="text-xs text-muted-foreground">
+            Total: {formatCurrency(transaction.totalAmount || transaction.amount)}
+          </span>
+          <span className="text-xs text-blue-500">
+            {transaction.installments?.map(inst => (
+              <span key={inst.installmentNumber} className="mr-1">
+                {new Date(inst.dueDate).toLocaleDateString('pt-BR', { month: 'short' })}
+              </span>
+            ))}
+          </span>
+        </div>
+      );
+    }
+    
+    return formatCurrency(transaction.amount);
   };
 
   const handleEditClick = (transaction: Transaction) => {
@@ -168,7 +204,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({ className }) =
                         <CategoryBadge category={transaction.category} />
                       </div>
                       <div className="col-span-2 text-sm text-muted-foreground">
-                        {getPaymentMethodName(transaction.paymentMethod)}
+                        {getPaymentMethodInfo(transaction)}
                         {transaction.dueMonth && (
                           <span className="ml-1 text-xs bg-blue-100 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400 px-1 rounded">
                             {new Date(transaction.dueMonth + '-01').toLocaleDateString(undefined, { month: 'short', year: '2-digit' })}
@@ -179,7 +215,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({ className }) =
                         {formatDate(transaction.date)}
                       </div>
                       <div className="col-span-2 text-right font-medium">
-                        {formatCurrency(transaction.amount)}
+                        {getTransactionAmount(transaction)}
                       </div>
                       <div className="col-span-1 flex justify-end items-center space-x-1">
                         <button
