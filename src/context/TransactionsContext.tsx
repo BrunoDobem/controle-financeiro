@@ -30,14 +30,35 @@ const generateInstallments = (
   date: string,
   totalInstallments: number
 ): CreditCardInstallment[] => {
+  // Calcula o valor exato de cada parcela
   const installmentAmount = Number((amount / totalInstallments).toFixed(2));
+  
+  // Calcula o valor restante devido a arredondamentos
   const remainder = Number((amount - (installmentAmount * totalInstallments)).toFixed(2));
   
-  return Array.from({ length: totalInstallments }).map((_, index) => ({
-    installmentNumber: index + 1,
-    amount: index === 0 ? installmentAmount + remainder : installmentAmount,
-    dueDate: calculateDueDate(date, index + 1)
-  }));
+  // Cria um array com as parcelas
+  return Array.from({ length: totalInstallments }, (_, index) => {
+    // Cria uma nova data para cada parcela
+    const dueDate = new Date(date);
+    
+    // Se a compra for após o dia de fechamento, a primeira parcela vai para o próximo mês
+    if (dueDate.getDate() > CREDIT_CARD_CLOSING_DAY) {
+      dueDate.setMonth(dueDate.getMonth() + 1);
+    }
+    
+    // Adiciona os meses para cada parcela subsequente
+    dueDate.setMonth(dueDate.getMonth() + index);
+    
+    // Define o dia de vencimento
+    dueDate.setDate(CREDIT_CARD_DUE_DAY);
+    
+    return {
+      installmentNumber: index + 1,
+      // Adiciona o remainder na primeira parcela
+      amount: index === 0 ? installmentAmount + remainder : installmentAmount,
+      dueDate: dueDate.toISOString().split('T')[0]
+    };
+  });
 };
 
 // Sample data generator
@@ -107,30 +128,36 @@ export const TransactionsProvider = ({ children }: { children: ReactNode }) => {
     const paymentMethod = paymentMethods.find(m => m.id === transaction.paymentMethod);
     const isCreditCard = paymentMethod?.type === 'credit';
     
-    const newTransaction: Transaction = {
-      id: `tr-${Date.now()}`,
-      ...transaction
-    };
-
     // Se for cartão de crédito e tiver parcelas
     if (isCreditCard && transaction.totalInstallments && transaction.totalInstallments > 1) {
+      // Gera as parcelas usando a função auxiliar
       const installments = generateInstallments(
         transaction.amount,
         transaction.date,
         transaction.totalInstallments
       );
-      
-      // Adiciona as informações de parcelamento à transação
-      newTransaction.installments = installments;
-      newTransaction.dueMonth = installments[0].dueDate.substring(0, 7);
-      
-      // Adiciona informações adicionais para facilitar a visualização
-      newTransaction.description = `${transaction.description} (${transaction.totalInstallments}x)`;
-      newTransaction.installmentAmount = installments[0].amount;
-      newTransaction.totalAmount = transaction.amount;
+
+      // Cria a transação com as informações de parcelamento
+      const newTransaction: Transaction = {
+        id: `tr-${Date.now()}`,
+        ...transaction,
+        installments,
+        dueMonth: installments[0].dueDate.substring(0, 7),
+        description: `${transaction.description} (${transaction.totalInstallments}x)`,
+        installmentAmount: installments[0].amount,
+        totalAmount: transaction.amount
+      };
+
+      setTransactions(prev => [newTransaction, ...prev]);
+    } else {
+      // Para transações não parceladas
+      const newTransaction: Transaction = {
+        id: `tr-${Date.now()}`,
+        ...transaction
+      };
+
+      setTransactions(prev => [newTransaction, ...prev]);
     }
-    
-    setTransactions(prev => [newTransaction, ...prev]);
   };
 
   const updateTransaction = (id: string, transaction: Omit<Transaction, 'id'>) => {
@@ -165,13 +192,24 @@ export const TransactionsProvider = ({ children }: { children: ReactNode }) => {
   // Função auxiliar para calcular o valor total das parcelas em um determinado mês
   const calculateMonthlyInstallments = (transactions: Transaction[], yearMonth: string): number => {
     return transactions.reduce((total, transaction) => {
+      // Se não for uma transação parcelada, ignora
       if (!transaction.installments) return total;
-      
-      const installmentForMonth = transaction.installments.find(
-        inst => inst.dueDate.substring(0, 7) === yearMonth
+
+      // Encontra todas as parcelas que vencem no mês especificado
+      const installmentsForMonth = transaction.installments.filter(
+        inst => inst.dueDate.startsWith(yearMonth)
       );
-      
-      return total + (installmentForMonth?.amount || 0);
+
+      // Soma os valores de todas as parcelas encontradas
+      const monthTotal = installmentsForMonth.reduce((sum, inst) => {
+        // Verifica se a parcela é válida e tem um valor
+        if (inst && typeof inst.amount === 'number') {
+          return sum + inst.amount;
+        }
+        return sum;
+      }, 0);
+
+      return total + monthTotal;
     }, 0);
   };
 

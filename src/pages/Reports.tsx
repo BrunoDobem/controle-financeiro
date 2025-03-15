@@ -14,7 +14,7 @@ const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#8dd1e1'
 
 const Reports = () => {
   const { t } = useTranslation();
-  const { transactions, calculateMonthlyInstallments } = useTransactions();
+  const { transactions, paymentMethods } = useTransactions();
   const formatCurrency = useCurrencyFormat();
   const [activeTab, setActiveTab] = useState('monthly');
   const [dateRange, setDateRange] = useState('6months');
@@ -54,9 +54,31 @@ const Reports = () => {
     if (!selectedRange) return transactions;
 
     const startDate = selectedRange.getStartDate(now);
-    return transactions.filter(t => {
-      const transactionDate = new Date(t.date);
-      return transactionDate >= startDate && transactionDate <= now;
+    
+    // Encontra a data mais distante entre todas as parcelas
+    let furthestDate = now;
+    transactions.forEach(transaction => {
+      if (transaction.installments?.length) {
+        const lastInstallment = transaction.installments[transaction.installments.length - 1];
+        const lastDueDate = new Date(lastInstallment.dueDate);
+        if (lastDueDate > furthestDate) {
+          furthestDate = lastDueDate;
+        }
+      }
+    });
+
+    return transactions.filter(transaction => {
+      if (!transaction.installments) {
+        // Para transações regulares, usa a data da transação
+        const transactionDate = new Date(transaction.date);
+        return transactionDate >= startDate && transactionDate <= furthestDate;
+      }
+      
+      // Para transações parceladas, inclui se qualquer parcela estiver no período
+      return transaction.installments.some(installment => {
+        const dueDate = new Date(installment.dueDate);
+        return dueDate >= startDate && dueDate <= furthestDate;
+      });
     });
   }, [transactions, dateRange, dateRanges]);
 
@@ -64,38 +86,61 @@ const Reports = () => {
     const monthlyTotals = new Map();
     const now = new Date();
     const selectedRange = dateRanges.find(range => range.id === dateRange);
-    if (!selectedRange) return [];
-
-    const startDate = selectedRange.getStartDate(now);
+    const startDate = selectedRange ? selectedRange.getStartDate(now) : new Date(now.getFullYear(), now.getMonth() - 11, 1);
     
-    // Gera uma lista de todos os meses no intervalo
-    const months = [];
+    // Encontra a data mais distante entre todas as parcelas
+    let furthestDate = now;
+    transactions.forEach(transaction => {
+      if (transaction.installments?.length) {
+        const lastInstallment = transaction.installments[transaction.installments.length - 1];
+        const lastDueDate = new Date(lastInstallment.dueDate);
+        if (lastDueDate > furthestDate) {
+          furthestDate = lastDueDate;
+        }
+      }
+    });
+    
+    // Inicializa todos os meses até a data mais distante
     let currentDate = new Date(startDate);
-    while (currentDate <= now) {
+    while (currentDate <= furthestDate) {
       const monthKey = currentDate.toLocaleString('default', { month: 'short', year: '2-digit' });
-      const yearMonth = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
-      months.push({ monthKey, yearMonth });
+      monthlyTotals.set(monthKey, 0);
       currentDate.setMonth(currentDate.getMonth() + 1);
     }
 
-    // Para cada mês, calcula o total incluindo parcelas
-    months.forEach(({ monthKey, yearMonth }) => {
-      let monthTotal = 0;
+    // Processa cada transação
+    transactions.forEach(transaction => {
+      if (!transaction.amount) return;
 
-      // Soma transações regulares do mês
-      filteredTransactions.forEach(transaction => {
-        const transactionDate = new Date(transaction.date);
-        const transactionYearMonth = `${transactionDate.getFullYear()}-${String(transactionDate.getMonth() + 1).padStart(2, '0')}`;
-        
-        if (!transaction.installments && transactionYearMonth === yearMonth) {
-          monthTotal += transaction.amount;
+      const transactionDate = new Date(transaction.date);
+      const selectedMethod = paymentMethods.find(m => m.id === transaction.paymentMethod);
+      const isCreditCard = selectedMethod?.type === 'credit';
+      
+      // Se for uma transação parcelada de cartão de crédito
+      if (isCreditCard && transaction.installments?.length > 0) {
+        transaction.installments.forEach(installment => {
+          const dueDate = new Date(installment.dueDate);
+          if (dueDate >= startDate && dueDate <= furthestDate) {
+            const monthKey = dueDate.toLocaleString('default', { month: 'short', year: '2-digit' });
+            if (monthlyTotals.has(monthKey)) {
+              monthlyTotals.set(
+                monthKey,
+                monthlyTotals.get(monthKey) + Math.abs(installment.amount)
+              );
+            }
+          }
+        });
+      } 
+      // Se for uma transação normal
+      else if (transactionDate >= startDate && transactionDate <= furthestDate) {
+        const monthKey = transactionDate.toLocaleString('default', { month: 'short', year: '2-digit' });
+        if (monthlyTotals.has(monthKey)) {
+          monthlyTotals.set(
+            monthKey,
+            monthlyTotals.get(monthKey) + Math.abs(transaction.amount)
+          );
         }
-      });
-
-      // Adiciona o valor das parcelas para este mês
-      monthTotal += calculateMonthlyInstallments(filteredTransactions, yearMonth);
-
-      monthlyTotals.set(monthKey, monthTotal);
+      }
     });
 
     return Array.from(monthlyTotals.entries())
@@ -103,66 +148,88 @@ const Reports = () => {
       .sort((a, b) => {
         const [monthA, yearA] = a.name.split(' ');
         const [monthB, yearB] = b.name.split(' ');
-        const dateA = new Date(`${monthA} 20${yearA}`).getTime();
-        const dateB = new Date(`${monthB} 20${yearB}`).getTime();
-        return dateA - dateB;
+        const dateA = new Date(`${monthA} 20${yearA}`);
+        const dateB = new Date(`${monthB} 20${yearB}`);
+        return dateA.getTime() - dateB.getTime();
       });
-  }, [filteredTransactions, dateRange, dateRanges, calculateMonthlyInstallments]);
+  }, [transactions, dateRange, dateRanges, paymentMethods]);
 
   const categoryData = useMemo(() => {
     const categoryTotals = new Map();
     let totalAmount = 0;
+    const now = new Date();
+    const selectedRange = dateRanges.find(range => range.id === dateRange);
+    const startDate = selectedRange ? selectedRange.getStartDate(now) : new Date(now.getFullYear(), now.getMonth() - 11, 1);
 
-    // Função auxiliar para adicionar valor à categoria
-    const addToCategory = (category: string, amount: number) => {
-      const currentTotal = categoryTotals.get(category) || 0;
-      categoryTotals.set(category, currentTotal + amount);
-      totalAmount += amount;
-    };
+    // Encontra a data mais distante entre todas as parcelas
+    let furthestDate = now;
+    transactions.forEach(transaction => {
+      if (transaction.installments?.length) {
+        const lastInstallment = transaction.installments[transaction.installments.length - 1];
+        const lastDueDate = new Date(lastInstallment.dueDate);
+        if (lastDueDate > furthestDate) {
+          furthestDate = lastDueDate;
+        }
+      }
+    });
 
-    filteredTransactions.forEach(transaction => {
-      if (transaction.installments) {
-        // Para transações parceladas, distribui o valor das parcelas
+    transactions.forEach(transaction => {
+      if (!transaction.amount) return;
+
+      const category = transaction.category;
+      const transactionDate = new Date(transaction.date);
+      const selectedMethod = paymentMethods.find(m => m.id === transaction.paymentMethod);
+      const isCreditCard = selectedMethod?.type === 'credit';
+
+      // Processa transações parceladas de cartão de crédito
+      if (isCreditCard && transaction.installments?.length > 0) {
         transaction.installments.forEach(installment => {
-          const installmentDate = new Date(installment.dueDate);
-          const now = new Date();
-          const selectedRange = dateRanges.find(range => range.id === dateRange);
-          if (!selectedRange) return;
-
-          const startDate = selectedRange.getStartDate(now);
-          if (installmentDate >= startDate && installmentDate <= now) {
-            addToCategory(transaction.category, installment.amount);
+          const dueDate = new Date(installment.dueDate);
+          if (dueDate >= startDate && dueDate <= furthestDate) {
+            const amount = Math.abs(installment.amount);
+            const current = categoryTotals.get(category) || 0;
+            categoryTotals.set(category, current + amount);
+            totalAmount += amount;
           }
         });
-      } else {
-        // Para transações normais, usa o valor total
-        addToCategory(transaction.category, transaction.amount);
+      }
+      // Processa transações normais
+      else if (transactionDate >= startDate && transactionDate <= furthestDate) {
+        const amount = Math.abs(transaction.amount);
+        const current = categoryTotals.get(category) || 0;
+        categoryTotals.set(category, current + amount);
+        totalAmount += amount;
       }
     });
 
     return Array.from(categoryTotals.entries())
       .map(([name, value]) => ({
         name: t(name),
-        value: Math.round((value / totalAmount) * 100)
+        value: totalAmount > 0 ? Math.round((value / totalAmount) * 100) : 0
       }))
       .sort((a, b) => b.value - a.value);
-  }, [filteredTransactions, dateRange, dateRanges, t]);
+  }, [transactions, dateRange, dateRanges, t, paymentMethods]);
 
   const spendingSummary = useMemo(() => {
     if (monthlyData.length === 0) return {
       average: 0,
       highest: { amount: 0, month: '' },
-      lowest: { amount: 0, month: '' },
+      lowest: { amount: Infinity, month: '' },
       total: 0
     };
 
+    const nonZeroMonths = monthlyData.filter(month => month.expenses > 0);
     const total = monthlyData.reduce((sum, month) => sum + month.expenses, 0);
-    const average = total / monthlyData.length;
+    const average = nonZeroMonths.length > 0 ? total / nonZeroMonths.length : 0;
+    
     const highest = monthlyData.reduce((max, curr) => 
-      curr.expenses > max.expenses ? curr : max
+      curr.expenses > max.expenses ? curr : max,
+      { expenses: 0, name: '' }
     );
-    const lowest = monthlyData.reduce((min, curr) => 
-      curr.expenses < min.expenses ? curr : min
+    
+    const lowest = nonZeroMonths.reduce((min, curr) => 
+      curr.expenses < min.expenses ? curr : min,
+      nonZeroMonths[0] || { expenses: 0, name: '' }
     );
 
     return {
