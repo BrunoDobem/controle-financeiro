@@ -4,7 +4,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   LineChart, Line, PieChart, Pie, Cell
 } from 'recharts';
-import { PieChart as PieChartIcon, BarChart3, LineChart as LineChartIcon, Calendar } from 'lucide-react';
+import { PieChart as PieChartIcon, BarChart3, LineChart as LineChartIcon, Calendar, CreditCard } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTransactions } from '@/context/TransactionsContext';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -23,6 +23,7 @@ const Reports = () => {
     { id: 'monthly', label: t('monthlyOverview'), icon: <BarChart3 className="w-4 h-4 mr-2" /> },
     { id: 'trends', label: t('spendingTrendsReport'), icon: <LineChartIcon className="w-4 h-4 mr-2" /> },
     { id: 'breakdown', label: t('categoryBreakdown'), icon: <PieChartIcon className="w-4 h-4 mr-2" /> },
+    { id: 'payment', label: t('paymentMethodBreakdown'), icon: <CreditCard className="w-4 h-4 mr-2" /> },
   ];
   
   const dateRanges = [
@@ -239,6 +240,64 @@ const Reports = () => {
       total
     };
   }, [monthlyData]);
+
+  const paymentMethodData = useMemo(() => {
+    const methodTotals = new Map();
+    let totalAmount = 0;
+    const now = new Date();
+    const selectedRange = dateRanges.find(range => range.id === dateRange);
+    const startDate = selectedRange ? selectedRange.getStartDate(now) : new Date(now.getFullYear(), now.getMonth() - 11, 1);
+
+    // Encontra a data mais distante entre todas as parcelas
+    let furthestDate = now;
+    transactions.forEach(transaction => {
+      if (transaction.installments?.length) {
+        const lastInstallment = transaction.installments[transaction.installments.length - 1];
+        const lastDueDate = new Date(lastInstallment.dueDate);
+        if (lastDueDate > furthestDate) {
+          furthestDate = lastDueDate;
+        }
+      }
+    });
+
+    transactions.forEach(transaction => {
+      if (!transaction.amount) return;
+
+      const method = paymentMethods.find(m => m.id === transaction.paymentMethod);
+      if (!method) return;
+
+      const transactionDate = new Date(transaction.date);
+      const isCreditCard = method.type === 'credit';
+
+      // Processa transações parceladas de cartão de crédito
+      if (isCreditCard && transaction.installments?.length > 0) {
+        transaction.installments.forEach(installment => {
+          const dueDate = new Date(installment.dueDate);
+          if (dueDate >= startDate && dueDate <= furthestDate) {
+            const amount = Math.abs(installment.amount);
+            const current = methodTotals.get(method.name) || 0;
+            methodTotals.set(method.name, current + amount);
+            totalAmount += amount;
+          }
+        });
+      }
+      // Processa transações normais
+      else if (transactionDate >= startDate && transactionDate <= furthestDate) {
+        const amount = Math.abs(transaction.amount);
+        const current = methodTotals.get(method.name) || 0;
+        methodTotals.set(method.name, current + amount);
+        totalAmount += amount;
+      }
+    });
+
+    return Array.from(methodTotals.entries())
+      .map(([name, value]) => ({
+        name,
+        value: totalAmount > 0 ? Math.round((value / totalAmount) * 100) : 0,
+        amount: value
+      }))
+      .sort((a, b) => b.value - a.value);
+  }, [transactions, dateRange, dateRanges, paymentMethods]);
   
   return (
     <div className="min-h-screen bg-background">
@@ -254,6 +313,24 @@ const Reports = () => {
               <p className="text-muted-foreground">{t('analyzeSpending')}</p>
             </div>
           </div>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={cn(
+                "flex items-center justify-center px-4 py-2 rounded-lg text-sm font-medium transition-colors",
+                activeTab === tab.id
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted hover:bg-muted/80"
+              )}
+            >
+              {tab.icon}
+              {tab.label}
+            </button>
+          ))}
         </div>
         
         <div className="bg-card rounded-xl shadow-sm border border-border/50 overflow-hidden mb-6 slide-up" style={{ animationDelay: '0.1s', animationFillMode: 'forwards' }}>
@@ -419,6 +496,56 @@ const Reports = () => {
                         <span className="text-sm font-medium">{t('totalSpending')}</span>
                         <span className="text-lg font-bold">{formatCurrency(spendingSummary.total)}</span>
                       </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'payment' && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full">
+                  <div className="flex items-center justify-center">
+                    <ResponsiveContainer width="100%" height={300}>
+                      <PieChart>
+                        <Pie
+                          data={paymentMethodData}
+                          cx="50%"
+                          cy="50%"
+                          labelLine={false}
+                          label={({ name, value }) => `${name} (${value}%)`}
+                          outerRadius={100}
+                          fill="#8884d8"
+                          dataKey="value"
+                        >
+                          {paymentMethodData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip
+                          formatter={(value, name, props) => [
+                            `${formatCurrency(props.payload.amount)} (${value}%)`,
+                            name
+                          ]}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="flex flex-col justify-center">
+                    <div className="space-y-4">
+                      {paymentMethodData.map((method, index) => (
+                        <div key={method.name} className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div 
+                              className="w-3 h-3 rounded-full" 
+                              style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                            />
+                            <span className="font-medium">{method.name}</span>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-medium">{formatCurrency(method.amount)}</div>
+                            <div className="text-sm text-muted-foreground">{method.value}%</div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>

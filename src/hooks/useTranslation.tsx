@@ -101,6 +101,7 @@ const translations = {
     'yearToDate': 'Year-to-Date',
     'topSpendingCategories': 'Top Spending Categories',
     'paymentMethodAnalysis': 'Payment Method Analysis',
+    'paymentMethodBreakdown': 'Payment Method Breakdown',
     
     // Settings
     'settings': 'Settings',
@@ -210,6 +211,7 @@ const translations = {
     'yearToDate': 'Acumulado do Ano',
     'topSpendingCategories': 'Principais Categorias de Gastos',
     'paymentMethodAnalysis': 'Análise por Forma de Pagamento',
+    'paymentMethodBreakdown': 'Análise por Forma de Pagamento',
     
     // Settings
     'settings': 'Configurações',
