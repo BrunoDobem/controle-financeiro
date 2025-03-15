@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { PlusCircle } from 'lucide-react';
 import { Category } from '@/types';
@@ -6,6 +5,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useTransactions } from '@/context/TransactionsContext';
 import { useTranslation } from '@/hooks/useTranslation';
+import { useCurrencyFormat } from '@/hooks/useCurrencyFormat';
 
 interface TransactionFormProps {
   className?: string;
@@ -14,12 +14,14 @@ interface TransactionFormProps {
 export const TransactionForm: React.FC<TransactionFormProps> = ({ className }) => {
   const { t } = useTranslation();
   const { addTransaction, paymentMethods } = useTransactions();
+  const formatCurrency = useCurrencyFormat();
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [category, setCategory] = useState<Category>('other');
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [dueMonth, setDueMonth] = useState<string | undefined>(undefined);
+  const [totalInstallments, setTotalInstallments] = useState<number>(1);
   const [isExpanded, setIsExpanded] = useState(false);
 
   const categories: Category[] = [
@@ -46,6 +48,9 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ className }) =
       return;
     }
     
+    const selectedMethod = paymentMethods.find(m => m.id === paymentMethod);
+    const isCreditCard = selectedMethod?.type === 'credit';
+
     addTransaction({
       description,
       amount: parseFloat(amount),
@@ -53,6 +58,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ className }) =
       category,
       paymentMethod,
       dueMonth,
+      totalInstallments: isCreditCard ? totalInstallments : undefined
     });
     
     // Reset form
@@ -62,6 +68,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ className }) =
     setCategory('other');
     setPaymentMethod('cash');
     setDueMonth(undefined);
+    setTotalInstallments(1);
     setIsExpanded(false);
     
     toast.success(t('transactionAdded'));
@@ -73,6 +80,9 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ className }) =
     date.setMonth(date.getMonth() + 1);
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
   };
+
+  const selectedMethod = paymentMethods.find(m => m.id === paymentMethod);
+  const isCreditCard = selectedMethod?.type === 'credit';
 
   return (
     <div className={cn("bg-card rounded-xl shadow-sm border border-border/50", className)}>
@@ -179,41 +189,36 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ className }) =
               </select>
             </div>
             
-            {paymentMethods.find(m => m.id === paymentMethod)?.type === 'credit' && (
-              <div>
-                <label htmlFor="dueMonth" className="block text-sm font-medium text-foreground mb-1">
-                  {t('dueMonth')}
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const currentDate = new Date();
-                      setDueMonth(`${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`);
-                    }}
-                    className={cn(
-                      "p-2 rounded-lg text-center text-xs transition-all border",
-                      dueMonth === `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}` 
-                        ? 'bg-primary text-primary-foreground' 
-                        : 'bg-secondary text-secondary-foreground'
-                    )}
+            {isCreditCard && (
+              <>
+                <div>
+                  <label htmlFor="installments" className="block text-sm font-medium text-foreground mb-1">
+                    {t('installments')}
+                  </label>
+                  <select
+                    id="installments"
+                    value={totalInstallments}
+                    onChange={(e) => setTotalInstallments(Number(e.target.value))}
+                    className="w-full px-3 py-2 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   >
-                    {t('currentMonth')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDueMonth(getNextMonth())}
-                    className={cn(
-                      "p-2 rounded-lg text-center text-xs transition-all border",
-                      dueMonth === getNextMonth() 
-                        ? 'bg-primary text-primary-foreground' 
-                        : 'bg-secondary text-secondary-foreground'
-                    )}
-                  >
-                    {t('nextMonth')}
-                  </button>
+                    {Array.from({ length: 12 }).map((_, i) => (
+                      <option key={i + 1} value={i + 1}>
+                        {i + 1}x {amount && `de ${formatCurrency(parseFloat(amount) / (i + 1))}`}
+                      </option>
+                    ))}
+                  </select>
                 </div>
-              </div>
+
+                {totalInstallments > 1 && (
+                  <div className="text-sm text-muted-foreground">
+                    <p>{t('installmentInfo', { 
+                      total: formatCurrency(parseFloat(amount || '0')),
+                      installment: formatCurrency(parseFloat(amount || '0') / totalInstallments),
+                      count: totalInstallments
+                    })}</p>
+                  </div>
+                )}
+              </>
             )}
             
             <div className="flex justify-end space-x-2">

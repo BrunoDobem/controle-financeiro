@@ -1,5 +1,44 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Transaction, Category, PaymentMethod } from '@/types';
+import { Transaction, Category, PaymentMethod, CreditCardInstallment } from '@/types';
+
+// Constantes para cartão de crédito
+const CREDIT_CARD_CLOSING_DAY = 4;
+const CREDIT_CARD_DUE_DAY = 11;
+
+// Função auxiliar para calcular a data de vencimento
+const calculateDueDate = (purchaseDate: string, installmentNumber: number = 1): string => {
+  const date = new Date(purchaseDate);
+  const purchaseDay = date.getDate();
+  
+  // Se a compra for após o dia de fechamento, vai para a fatura do próximo mês
+  if (purchaseDay > CREDIT_CARD_CLOSING_DAY) {
+    date.setMonth(date.getMonth() + 1);
+  }
+  
+  // Adiciona os meses para a parcela atual
+  date.setMonth(date.getMonth() + installmentNumber - 1);
+  
+  // Define o dia de vencimento
+  date.setDate(CREDIT_CARD_DUE_DAY);
+  
+  return date.toISOString().split('T')[0];
+};
+
+// Função auxiliar para gerar parcelas
+const generateInstallments = (
+  amount: number,
+  date: string,
+  totalInstallments: number
+): CreditCardInstallment[] => {
+  const installmentAmount = Number((amount / totalInstallments).toFixed(2));
+  const remainder = Number((amount - (installmentAmount * totalInstallments)).toFixed(2));
+  
+  return Array.from({ length: totalInstallments }).map((_, index) => ({
+    installmentNumber: index + 1,
+    amount: index === 0 ? installmentAmount + remainder : installmentAmount,
+    dueDate: calculateDueDate(date, index + 1)
+  }));
+};
 
 // Sample data generator
 const generateSampleTransactions = (): Transaction[] => {
@@ -40,6 +79,7 @@ interface TransactionsContextType {
   deleteTransaction: (id: string) => void;
   addPaymentMethod: (paymentMethod: Omit<PaymentMethod, 'id'>) => void;
   deletePaymentMethod: (id: string) => void;
+  calculateMonthlyInstallments: (transactions: Transaction[], yearMonth: string) => number;
 }
 
 const TransactionsContext = createContext<TransactionsContextType | undefined>(undefined);
@@ -64,10 +104,31 @@ export const TransactionsProvider = ({ children }: { children: ReactNode }) => {
   }, [paymentMethods]);
 
   const addTransaction = (transaction: Omit<Transaction, 'id'>) => {
+    const paymentMethod = paymentMethods.find(m => m.id === transaction.paymentMethod);
+    const isCreditCard = paymentMethod?.type === 'credit';
+    
     const newTransaction: Transaction = {
       id: `tr-${Date.now()}`,
       ...transaction
     };
+
+    // Se for cartão de crédito e tiver parcelas
+    if (isCreditCard && transaction.totalInstallments && transaction.totalInstallments > 1) {
+      const installments = generateInstallments(
+        transaction.amount,
+        transaction.date,
+        transaction.totalInstallments
+      );
+      
+      // Adiciona as informações de parcelamento à transação
+      newTransaction.installments = installments;
+      newTransaction.dueMonth = installments[0].dueDate.substring(0, 7);
+      
+      // Adiciona informações adicionais para facilitar a visualização
+      newTransaction.description = `${transaction.description} (${transaction.totalInstallments}x)`;
+      newTransaction.installmentAmount = installments[0].amount;
+      newTransaction.totalAmount = transaction.amount;
+    }
     
     setTransactions(prev => [newTransaction, ...prev]);
   };
@@ -101,6 +162,19 @@ export const TransactionsProvider = ({ children }: { children: ReactNode }) => {
     setPaymentMethods(prev => prev.filter(method => method.id !== id));
   };
 
+  // Função auxiliar para calcular o valor total das parcelas em um determinado mês
+  const calculateMonthlyInstallments = (transactions: Transaction[], yearMonth: string): number => {
+    return transactions.reduce((total, transaction) => {
+      if (!transaction.installments) return total;
+      
+      const installmentForMonth = transaction.installments.find(
+        inst => inst.dueDate.substring(0, 7) === yearMonth
+      );
+      
+      return total + (installmentForMonth?.amount || 0);
+    }, 0);
+  };
+
   return (
     <TransactionsContext.Provider 
       value={{ 
@@ -110,7 +184,8 @@ export const TransactionsProvider = ({ children }: { children: ReactNode }) => {
         updateTransaction,
         deleteTransaction,
         addPaymentMethod,
-        deletePaymentMethod
+        deletePaymentMethod,
+        calculateMonthlyInstallments
       }}
     >
       {children}
